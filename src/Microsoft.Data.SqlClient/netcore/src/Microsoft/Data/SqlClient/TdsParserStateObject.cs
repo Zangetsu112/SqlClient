@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
+using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Security;
@@ -359,6 +360,7 @@ namespace Microsoft.Data.SqlClient
         // Every time you call this method increment the offset and decrease len by the value of totalRead
         public bool TryReadByteArray(Span<byte> buff, int len, out int totalRead)
         {
+		// Console.WriteLine("try read byte array called");
             totalRead = 0;
 
 #if DEBUG
@@ -576,7 +578,7 @@ namespace Microsoft.Data.SqlClient
                     Debug.Assert(_bTmpRead + bytesRead == 8, "TryReadByteArray returned true without reading all data required");
                     _bTmpRead = 0;
                     AssertValidState();
-                    value = BitConverter.ToInt64(_bTmp, 0);
+                    value = BinaryPrimitives.ReadInt64LittleEndian(_bTmp);
                     return true;
                 }
             }
@@ -585,7 +587,7 @@ namespace Microsoft.Data.SqlClient
                 // The entire long is in the packet and in the buffer, so just return it
                 // and take care of the counters.
 
-                value = BitConverter.ToInt64(_inBuff, _inBytesUsed);
+                value = BinaryPrimitives.ReadInt64LittleEndian(new ReadOnlySpan<byte>(_inBuff, _inBytesUsed, 8));
 
                 _inBytesUsed += 8;
                 _inBytesPacket -= 8;
@@ -654,7 +656,7 @@ namespace Microsoft.Data.SqlClient
                     Debug.Assert(_bTmpRead + bytesRead == 4, "TryReadByteArray returned true without reading all data required");
                     _bTmpRead = 0;
                     AssertValidState();
-                    value = BitConverter.ToUInt32(_bTmp, 0);
+                    value = BinaryPrimitives.ReadUInt32LittleEndian(_bTmp);
                     return true;
                 }
             }
@@ -663,7 +665,7 @@ namespace Microsoft.Data.SqlClient
                 // The entire int is in the packet and in the buffer, so just return it
                 // and take care of the counters.
 
-                value = BitConverter.ToUInt32(_inBuff, _inBytesUsed);
+                value = BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(_inBuff, _inBytesUsed, 4));
 
                 _inBytesUsed += 4;
                 _inBytesPacket -= 4;
@@ -1221,12 +1223,25 @@ namespace Microsoft.Data.SqlClient
                 shouldDecrement = true;
 
                 readPacket = ReadSyncOverAsync(GetTimeoutRemaining(), out error);
+		// Console.WriteLine($"readPacket length {readPacket.ManagedPacket._dataLength}");
+		// Console.WriteLine($"ReadSni sync error code: {error}");
+		// Console.WriteLine("Packet dump");
+		int to_read = readPacket.ManagedPacket.DataLeft;
+		byte[] buffer = new byte[to_read];
+		readPacket.ManagedPacket.GetData(buffer, ref to_read);
+		foreach(var item in buffer)
+		{
+			// Console.Write(item.ToString());
+			// Console.Write(" ");
+		}
+		// Console.WriteLine();
 
                 Interlocked.Decrement(ref _readingCount);
                 shouldDecrement = false;
 
                 if (_parser.MARSOn)
                 { // Only take reset lock on MARS and Async.
+			// Console.WriteLine("Inside Mars-on block");
                     CheckSetResetConnectionState(error, CallbackType.Read);
                 }
 
@@ -1720,6 +1735,15 @@ namespace Microsoft.Data.SqlClient
                                 shouldDecrement = true;
 
                                 syncReadPacket = ReadSyncOverAsync(stateObj.GetTimeoutRemaining(), out error);
+				// Console.WriteLine("Packet dump");
+				int to_read = syncReadPacket.ManagedPacket.DataLeft;
+				byte[] buffer = new byte[to_read];
+				syncReadPacket.ManagedPacket.GetData(buffer,ref to_read);
+				foreach(var item in buffer)
+				{
+					// Console.WriteLine(item.ToString());
+				}
+
 
                                 Interlocked.Decrement(ref _readingCount);
                                 shouldDecrement = false;
@@ -2371,7 +2395,7 @@ namespace Microsoft.Data.SqlClient
                 // So we need to avoid this check prior to login completing
                 state == TdsParserState.OpenLoggedIn
                     && !_bulkCopyOpperationInProgress // ignore the condition checking for bulk copy
-                    && _outBytesUsed == (_outputHeaderLen + BitConverter.ToInt32(_outBuff, _outputHeaderLen))
+                    && _outBytesUsed == (_outputHeaderLen + BinaryPrimitives.ReadInt32LittleEndian(new ReadOnlySpan<byte>(_outBuff, _outputHeaderLen, 4)))
                     && _outputPacketCount == 0
                     || _outBytesUsed == _outputHeaderLen
                     && _outputPacketCount == 0)
@@ -2669,9 +2693,18 @@ namespace Microsoft.Data.SqlClient
         private Task WriteSni(bool canAccumulate)
         {
             // Prepare packet, and write to packet.
+		    // Console.WriteLine("WriteSni call hua");
             PacketHandle packet = GetResetWritePacket(_outBytesUsed);
 
             SetBufferSecureStrings();
+            // Console.WriteLine("OutBuff dump");
+            // Console.WriteLine($"OutBuff size: {_outBytesUsed}");
+            for(int i=0 ; i < _outBytesUsed; i++)
+            {
+                // Console.Write(_outBuff[i].ToString());
+                // Console.Write(" ");
+            }
+		    // Console.WriteLine()
             SetPacketData(packet, _outBuff, _outBytesUsed);
 
             Debug.Assert(Parser.Connection._parserLock.ThreadMayHaveLock(), "Thread is writing without taking the connection lock");

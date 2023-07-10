@@ -25,8 +25,10 @@ namespace Microsoft.Data.SqlClient
 
         private PacketHandle(SNI.SNIPacket managedPacket, int type)
         {
+		// Console.WriteLine("PacketHandle from inside Unix called");
             Type = type;
             ManagedPacket = managedPacket;
+	    // Console.WriteLine(ManagedPacket._dataLength);
         }
 
         public static PacketHandle FromManagedPacket(SNI.SNIPacket managedPacket) => new PacketHandle(managedPacket, ManagedPacketType);

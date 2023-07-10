@@ -23,7 +23,6 @@ using Microsoft.Data.SqlTypes;
 
 namespace Microsoft.Data.SqlClient
 {
-
     internal struct SNIErrorDetails
     {
         public string errorMessage;
@@ -1747,14 +1746,15 @@ namespace Microsoft.Data.SqlClient
 
         internal static void WriteInt(Span<byte> buffer, int value)
         {
-#if NETCOREAPP
-            BitConverter.TryWriteBytes(buffer, value);
-#else
+// #if NETCOREAPP
+//            BitConverter.TryWriteBytes(buffer, value);
+//	    Console.WriteLine("Called inside netcore app for some reason");
+// #else
             buffer[0] = (byte)(value & 0xff);
             buffer[1] = (byte)((value >> 8) & 0xff);
             buffer[2] = (byte)((value >> 16) & 0xff);
             buffer[3] = (byte)((value >> 24) & 0xff);
-#endif
+// #endif
         }
 
         //
@@ -2021,6 +2021,7 @@ namespace Microsoft.Data.SqlClient
                 {
                     return false;
                 }
+		// Console.WriteLine($"Token read: {token}");
 
                 if (!IsValidTdsToken(token))
                 {
@@ -2036,6 +2037,7 @@ namespace Microsoft.Data.SqlClient
                 {
                     return false;
                 }
+		// Console.WriteLine($"Token Length read: {tokenLength}");
 
                 switch (token)
                 {
@@ -2363,6 +2365,7 @@ namespace Microsoft.Data.SqlClient
                         }
                     case TdsEnums.SQLFEATUREEXTACK:
                         {
+			// Console.WriteLine("Sql feature ext called");
                             if (!TryProcessFeatureExtAck(stateObj))
                             {
                                 return false;
@@ -8231,8 +8234,10 @@ namespace Microsoft.Data.SqlClient
                 }
                 else
                 {
+			        // Console.WriteLine("Inside Recovery session data else block");
                     WriteUnsignedInt(recoverySessionData._tdsVersion, _physicalStateObj);
                 }
+		        // Console.WriteLine($"SqlLogin(req) returned packet size :{rec.packetSize}");
                 WriteInt(rec.packetSize, _physicalStateObj);
                 WriteInt(TdsEnums.CLIENT_PROG_VER, _physicalStateObj);
                 WriteInt(TdsParserStaticMethods.GetCurrentProcessIdForTdsLoginOnly(), _physicalStateObj);
