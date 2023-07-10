@@ -1186,9 +1186,7 @@ namespace Microsoft.Data.SqlClient
 
         private void CompleteLogin(bool enlistOK)
         {
-            // Console.WriteLine("Complete Login called");
             _parser.Run(RunBehavior.UntilDone, null, null, null, _parser._physicalStateObj);
-		    // Console.WriteLine("Parser Run behavior end");
 
             if (RoutingInfo == null)
             {

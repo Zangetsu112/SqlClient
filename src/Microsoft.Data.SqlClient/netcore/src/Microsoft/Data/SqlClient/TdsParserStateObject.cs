@@ -360,7 +360,6 @@ namespace Microsoft.Data.SqlClient
         // Every time you call this method increment the offset and decrease len by the value of totalRead
         public bool TryReadByteArray(Span<byte> buff, int len, out int totalRead)
         {
-		// Console.WriteLine("try read byte array called");
             totalRead = 0;
 
 #if DEBUG
@@ -690,16 +689,22 @@ namespace Microsoft.Data.SqlClient
                 }
 
                 AssertValidState();
+#if NETCOREAPP
+                value = BitConverter.Int32BitsToSingle(BinaryPrimitives.ReadInt32LittleEndian(_bTmp));
+#else
                 value = BitConverter.ToSingle(_bTmp, 0);
+#endif
                 return true;
             }
             else
             {
                 // The entire float is in the packet and in the buffer, so just return it
                 // and take care of the counters.
-
+#if NETCOREAPP
+                value = BitConverter.Int32BitsToSingle(BinaryPrimitives.ReadInt32LittleEndian(new ReadOnlySpan<byte>(_inBuff, _inBytesUsed, 4)));
+#else
                 value = BitConverter.ToSingle(_inBuff, _inBytesUsed);
-
+#endif
                 _inBytesUsed += 4;
                 _inBytesPacket -= 4;
 
@@ -723,7 +728,7 @@ namespace Microsoft.Data.SqlClient
                 }
 
                 AssertValidState();
-                value = BitConverter.ToDouble(_bTmp, 0);
+                value = BitConverter.Int64BitsToDouble(BinaryPrimitives.ReadInt64LittleEndian(_bTmp));
                 return true;
             }
             else
@@ -731,7 +736,7 @@ namespace Microsoft.Data.SqlClient
                 // The entire double is in the packet and in the buffer, so just return it
                 // and take care of the counters.
 
-                value = BitConverter.ToDouble(_inBuff, _inBytesUsed);
+                value = BitConverter.Int64BitsToDouble(BinaryPrimitives.ReadInt64LittleEndian(new ReadOnlySpan<byte>(_inBuff, _inBytesUsed, 8)));
 
                 _inBytesUsed += 8;
                 _inBytesPacket -= 8;
@@ -1223,25 +1228,12 @@ namespace Microsoft.Data.SqlClient
                 shouldDecrement = true;
 
                 readPacket = ReadSyncOverAsync(GetTimeoutRemaining(), out error);
-		// Console.WriteLine($"readPacket length {readPacket.ManagedPacket._dataLength}");
-		// Console.WriteLine($"ReadSni sync error code: {error}");
-		// Console.WriteLine("Packet dump");
-		int to_read = readPacket.ManagedPacket.DataLeft;
-		byte[] buffer = new byte[to_read];
-		readPacket.ManagedPacket.GetData(buffer, ref to_read);
-		foreach(var item in buffer)
-		{
-			// Console.Write(item.ToString());
-			// Console.Write(" ");
-		}
-		// Console.WriteLine();
 
                 Interlocked.Decrement(ref _readingCount);
                 shouldDecrement = false;
 
                 if (_parser.MARSOn)
                 { // Only take reset lock on MARS and Async.
-			// Console.WriteLine("Inside Mars-on block");
                     CheckSetResetConnectionState(error, CallbackType.Read);
                 }
 
@@ -1735,15 +1727,6 @@ namespace Microsoft.Data.SqlClient
                                 shouldDecrement = true;
 
                                 syncReadPacket = ReadSyncOverAsync(stateObj.GetTimeoutRemaining(), out error);
-				// Console.WriteLine("Packet dump");
-				int to_read = syncReadPacket.ManagedPacket.DataLeft;
-				byte[] buffer = new byte[to_read];
-				syncReadPacket.ManagedPacket.GetData(buffer,ref to_read);
-				foreach(var item in buffer)
-				{
-					// Console.WriteLine(item.ToString());
-				}
-
 
                                 Interlocked.Decrement(ref _readingCount);
                                 shouldDecrement = false;
@@ -2693,18 +2676,9 @@ namespace Microsoft.Data.SqlClient
         private Task WriteSni(bool canAccumulate)
         {
             // Prepare packet, and write to packet.
-		    // Console.WriteLine("WriteSni call hua");
             PacketHandle packet = GetResetWritePacket(_outBytesUsed);
 
             SetBufferSecureStrings();
-            // Console.WriteLine("OutBuff dump");
-            // Console.WriteLine($"OutBuff size: {_outBytesUsed}");
-            for(int i=0 ; i < _outBytesUsed; i++)
-            {
-                // Console.Write(_outBuff[i].ToString());
-                // Console.Write(" ");
-            }
-		    // Console.WriteLine()
             SetPacketData(packet, _outBuff, _outBytesUsed);
 
             Debug.Assert(Parser.Connection._parserLock.ThreadMayHaveLock(), "Thread is writing without taking the connection lock");

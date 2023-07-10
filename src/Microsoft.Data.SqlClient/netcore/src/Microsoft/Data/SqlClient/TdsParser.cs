@@ -4,6 +4,7 @@
 
 using System;
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlTypes;
@@ -23,6 +24,7 @@ using Microsoft.Data.SqlTypes;
 
 namespace Microsoft.Data.SqlClient
 {
+
     internal struct SNIErrorDetails
     {
         public string errorMessage;
@@ -1748,7 +1750,6 @@ namespace Microsoft.Data.SqlClient
         {
 // #if NETCOREAPP
 //            BitConverter.TryWriteBytes(buffer, value);
-//	    Console.WriteLine("Called inside netcore app for some reason");
 // #else
             buffer[0] = (byte)(value & 0xff);
             buffer[1] = (byte)((value >> 8) & 0xff);
@@ -1766,8 +1767,13 @@ namespace Microsoft.Data.SqlClient
             {
                 throw ADP.ParameterValueOutOfRange(v.ToString());
             }
-
+#if NETCOREAPP
+            var bytes = new byte[4];
+            BinaryPrimitives.WriteInt32LittleEndian(bytes, BitConverter.SingleToInt32Bits(v));
+            return bytes;
+#else
             return BitConverter.GetBytes(v);
+#endif
         }
 
         internal void WriteFloat(float v, TdsParserStateObject stateObj)
@@ -1889,8 +1895,9 @@ namespace Microsoft.Data.SqlClient
             {
                 throw ADP.ParameterValueOutOfRange(v.ToString());
             }
-
-            return BitConverter.GetBytes(v);
+            byte[] bytes = new byte[8];
+            BinaryPrimitives.WriteInt64LittleEndian(bytes, BitConverter.DoubleToInt64Bits(v));
+            return bytes;
         }
 
         internal void WriteDouble(double v, TdsParserStateObject stateObj)
@@ -2021,7 +2028,6 @@ namespace Microsoft.Data.SqlClient
                 {
                     return false;
                 }
-		// Console.WriteLine($"Token read: {token}");
 
                 if (!IsValidTdsToken(token))
                 {
@@ -2037,7 +2043,6 @@ namespace Microsoft.Data.SqlClient
                 {
                     return false;
                 }
-		// Console.WriteLine($"Token Length read: {tokenLength}");
 
                 switch (token)
                 {
@@ -2365,7 +2370,6 @@ namespace Microsoft.Data.SqlClient
                         }
                     case TdsEnums.SQLFEATUREEXTACK:
                         {
-			// Console.WriteLine("Sql feature ext called");
                             if (!TryProcessFeatureExtAck(stateObj))
                             {
                                 return false;
@@ -3815,8 +3819,8 @@ namespace Microsoft.Data.SqlClient
                     uint currentOptionOffset = checked(i * optionSize);
 
                     byte id = tokenData[currentOptionOffset];
-                    uint dataLen = BitConverter.ToUInt32(tokenData, checked((int)(currentOptionOffset + 1)));
-                    uint dataOffset = BitConverter.ToUInt32(tokenData, checked((int)(currentOptionOffset + 5)));
+                    uint dataLen = BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(tokenData, checked((int)(currentOptionOffset + 1)), 4));
+                    uint dataOffset = BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(tokenData, checked((int)(currentOptionOffset + 5)), 4));
                     if (SqlClientEventSource.Log.IsAdvancedTraceOn())
                     {
                         SqlClientEventSource.Log.AdvancedTraceEvent("<sc.TdsParser.TryProcessFedAuthInfo> FedAuthInfoOpt: ID={0}, DataLen={1}, Offset={2}", id, dataLen.ToString(CultureInfo.InvariantCulture), dataOffset.ToString(CultureInfo.InvariantCulture));
@@ -5771,7 +5775,7 @@ namespace Microsoft.Data.SqlClient
                         return false;
                     }
 
-                    longValue = BitConverter.ToInt64(unencryptedBytes, 0);
+                    longValue = BinaryPrimitives.ReadInt64LittleEndian(new ReadOnlySpan<byte>(unencryptedBytes, 0, 8));
 
                     if (tdsType == TdsEnums.SQLBIT ||
                         tdsType == TdsEnums.SQLBITN)
@@ -5809,7 +5813,11 @@ namespace Microsoft.Data.SqlClient
                         return false;
                     }
 
+#if NETCOREAPP
+                    singleValue = BitConverter.Int32BitsToSingle(BinaryPrimitives.ReadInt32LittleEndian(unencryptedBytes));
+#else
                     singleValue = BitConverter.ToSingle(unencryptedBytes, 0);
+#endif
                     value.Single = singleValue;
                     break;
 
@@ -5820,7 +5828,7 @@ namespace Microsoft.Data.SqlClient
                         return false;
                     }
 
-                    doubleValue = BitConverter.ToDouble(unencryptedBytes, 0);
+                    doubleValue = BitConverter.Int64BitsToDouble(BinaryPrimitives.ReadInt64LittleEndian(unencryptedBytes));
                     value.Double = doubleValue;
                     break;
 
@@ -5837,8 +5845,8 @@ namespace Microsoft.Data.SqlClient
                             return false;
                         }
 
-                        mid = BitConverter.ToInt32(unencryptedBytes, 0);
-                        lo = BitConverter.ToUInt32(unencryptedBytes, 4);
+                        mid = BinaryPrimitives.ReadInt32LittleEndian(new ReadOnlySpan<byte>(unencryptedBytes, 0, 4));
+                        lo = BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(unencryptedBytes, 4, 4));
 
                         long l = (((long)mid) << 0x20) + ((long)lo);
                         value.SetToMoney(l);
@@ -5875,8 +5883,8 @@ namespace Microsoft.Data.SqlClient
                         return false;
                     }
 
-                    daypart = BitConverter.ToInt32(unencryptedBytes, 0);
-                    timepart = BitConverter.ToUInt32(unencryptedBytes, 4);
+                    daypart = BinaryPrimitives.ReadInt32LittleEndian(new ReadOnlySpan<byte>(unencryptedBytes, 0, 4));
+                    timepart = BinaryPrimitives.ReadUInt32LittleEndian(new ReadOnlySpan<byte>(unencryptedBytes, 4, 4));
                     value.SetToDateTime(daypart, (int)timepart);
                     break;
 
@@ -5922,7 +5930,7 @@ namespace Microsoft.Data.SqlClient
                     for (int i = 0; i < decLength; i++)
                     {
                         // up to 16 bytes of data following the sign byte
-                        bits[i] = BitConverter.ToInt32(unencryptedBytes, index);
+                        bits[i] = BinaryPrimitives.ReadInt32LittleEndian(new ReadOnlySpan<byte>(unencryptedBytes, index, 4));
                         index += 4;
                     }
                     value.SetToDecimal(md.baseTI.precision, md.baseTI.scale, fPositive, bits);
@@ -8234,10 +8242,8 @@ namespace Microsoft.Data.SqlClient
                 }
                 else
                 {
-			        // Console.WriteLine("Inside Recovery session data else block");
                     WriteUnsignedInt(recoverySessionData._tdsVersion, _physicalStateObj);
                 }
-		        // Console.WriteLine($"SqlLogin(req) returned packet size :{rec.packetSize}");
                 WriteInt(rec.packetSize, _physicalStateObj);
                 WriteInt(TdsEnums.CLIENT_PROG_VER, _physicalStateObj);
                 WriteInt(TdsParserStaticMethods.GetCurrentProcessIdForTdsLoginOnly(), _physicalStateObj);

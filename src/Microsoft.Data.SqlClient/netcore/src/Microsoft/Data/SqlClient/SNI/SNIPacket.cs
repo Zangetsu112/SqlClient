@@ -19,7 +19,7 @@ namespace Microsoft.Data.SqlClient.SNI
     internal sealed class SNIPacket
     {
         private static readonly Action<Task<int>, object> s_readCallback = ReadFromStreamAsyncContinuation;
-        public int _dataLength; // the length of the data in the data segment, advanced by Append-ing data, does not include smux header length
+        private int _dataLength; // the length of the data in the data segment, advanced by Append-ing data, does not include smux header length
         private int _dataCapacity; // the total capacity requested, if the array is rented this may be less than the _data.Length, does not include smux header length
         private int _dataOffset; // the start point of the data in the data segment, advanced by Take-ing data
         private int _headerLength; // the amount of space at the start of the array reserved for the smux header, this is zeroed in SetHeader

@@ -219,7 +219,6 @@ namespace Microsoft.Data.SqlClient.SNI
 
         internal override PacketHandle ReadSyncOverAsync(int timeoutRemaining, out uint error)
         {
-            // Console.WriteLine("Managed packet handle called");
             SNIHandle sessionHandle = GetSessionSNIHandleHandleOrThrow();
 
             error = sessionHandle.Receive(out SNIPacket packet, timeoutRemaining);
